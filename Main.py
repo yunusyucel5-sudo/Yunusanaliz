@@ -1,45 +1,69 @@
-import requests
+import os
 import time
-import json
-from datetime import datetime
+import threading
+import ccxt
+import pandas as pd
+from flask import Flask
+import firebase_admin
+from firebase_admin import credentials, db
 
-# Binance API URL
-BINANCE_URL = "https://api.binance.com/api/v3/ticker/24hr"
+# --- FLASK WEB SERVER (Render Port Fix) ---
+app = Flask(__name__)
 
-def calculate_rsi(prices, period=14):
-    if len(prices) < period + 1:
-        return 50
-    gains = []
-    losses = []
-    for i in range(1, len(prices)):
-        change = prices[i] - prices[i - 1]
-        if change >= 0:
-            gains.append(change)
-            losses.append(0)
-        else:
-            gains.append(0)
-            losses.append(abs(change))
-    
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
-    
-    if avg_loss == 0:
-        return 100
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+@app.route('/')
+def home():
+    return "Binance Sinyal Botu ve Firebase Entegrasyonu Aktif!"
 
-def run_bot():
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Bot arka planda aktif, Binance taranıyor...")
-    try:
-        response = requests.get(BINANCE_URL, timeout=10)
-        data = response.json()
-        try_coins = [c for c in data if c['symbol'].endswith('TRY')]
-        
-        print(f"Toplam {len(try_coins)} TL çifti bulundu. Analiz ediliyor...")
-    except Exception as e:
-        print(f"Hata oluştu: {e}")
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+# --- FIREBASE KURULUMU ---
+FIREBASE_URL = "https://yunusanaliz-fade1-default-rtdb.firebaseio.com/"
+
+if not firebase_admin._apps:
+    cred = credentials.Anonymous()
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': FIREBASE_URL
+    })
+
+# --- BINANCE BOT ARAMA DÖNGÜSÜ ---
+exchange = ccxt.binance()
+
+def analyze_market():
+    print("Binance piyasa taramasi baslatildi...")
+    while True:
+        try:
+            markets = exchange.load_markets()
+            try_pairs = [symbol for symbol in markets if symbol.endswith('/TRY')]
+            
+            signals = []
+            for symbol in try_pairs[:15]:  # Ilk 15 çifti tara
+                ticker = exchange.fetch_ticker(symbol)
+                price = ticker['last']
+                change = ticker['percentage']
+                
+                # Sinyal verisini hazirla
+                signals.append({
+                    'symbol': symbol.replace('/', '_'),
+                    'price': price,
+                    'change': change,
+                    'timestamp': int(time.time())
+                })
+
+            # Firebase Realtime Database'e gonder
+            ref = db.reference('signals')
+            ref.set({sig['symbol']: sig for sig in signals})
+            print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri guncellendi.")
+            
+        except Exception as e:
+            print("Hata oluştu:", e)
+            
+        time.sleep(60)  # Her 60 saniyede bir tara
 
 if __name__ == "__main__":
-    while True:
-        run_bot()
-        time.sleep(30) # 30 saniyede bir tara
+    # Flask sunucusunu arka planda baslat
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # Binance analiz döngüsünü baslat
+    analyze_market()
