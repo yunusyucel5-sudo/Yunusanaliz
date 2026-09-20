@@ -22,8 +22,7 @@ def run_flask():
 FIREBASE_URL = "https://yunusanaliz-fade1-default-rtdb.firebaseio.com/"
 
 if not firebase_admin._apps:
-    cred = credentials.Anonymous()
-    firebase_admin.initialize_app(cred, {
+    firebase_admin.initialize_app(options={
         'databaseURL': FIREBASE_URL
     })
 
