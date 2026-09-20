@@ -1,10 +1,8 @@
 import os
 import time
 import threading
-import ccxt
+import requests
 from flask import Flask
-import firebase_admin
-from firebase_admin import db
 
 # --- FLASK WEB SERVER ---
 app = Flask(__name__)
@@ -17,50 +15,64 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, use_reloader=False)
 
-# --- FIREBASE KURULUMU ---
-FIREBASE_URL = "https://yunusanaliz-fade1-default-rtdb.firebaseio.com/"
+# --- FIREBASE REST API ADRESİ ---
+FIREBASE_URL = "https://yunusanaliz-fade1-default-rtdb.firebaseio.com/signals.json"
 
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(options={
-        'databaseURL': FIREBASE_URL
-    })
-
-# --- BINANCE BOT ARAMA DÖNGÜSÜ ---
-exchange = ccxt.binance()
-
-TRY_PAIRS = [
-    'BTC/TRY', 'ETH/TRY', 'USDT/TRY', 'SOL/TRY', 'AVAX/TRY', 
-    'XRP/TRY', 'DOGE/TRY', 'PEPE/TRY', 'SHIB/TRY', 'ADA/TRY',
-    'NEAR/TRY', 'MATIC/TRY', 'AR/TRY', 'FLOKI/TRY', 'SUI/TRY'
+# --- HEDEF PARİTELER ---
+TARGET_SYMBOLS = [
+    'BTCTRY', 'ETHTRY', 'USDTRY', 'SOLTRY', 'AVAXTRY',
+    'XRPTRY', 'DOGETRY', 'PEPETRY', 'SHIBTRY', 'ADATRY',
+    'NEARTRY', 'MATICTRY', 'ARTRY', 'FLOKITRY', 'SUITRY'
 ]
+
+def fetch_binance_data():
+    """Binance Public Data API üzerinden verileri çeker (Render/ABD engelini aşar)."""
+    urls = [
+        "https://data-api.binance.vision/api/v3/ticker/24hr",
+        "https://api.binance.me/api/v3/ticker/24hr",
+        "https://api.binance.com/api/v3/ticker/24hr"
+    ]
+    
+    for url in urls:
+        try:
+            res = requests.get(url, timeout=10)
+            if res.status_code == 200:
+                return res.json()
+        except Exception as e:
+            print(f"URL denenirken hata ({url}):", e, flush=True)
+    return None
 
 def analyze_market():
     print("Binance piyasa taramasi baslatildi...", flush=True)
     while True:
         try:
             print("Piyasa verileri çekiliyor...", flush=True)
-            signals = []
+            raw_data = fetch_binance_data()
             
-            for symbol in TRY_PAIRS:
-                try:
-                    ticker = exchange.fetch_ticker(symbol)
-                    price = ticker['last']
-                    change = ticker['percentage']
-                    
-                    signals.append({
-                        'symbol': symbol.replace('/', '_'),
-                        'price': price,
-                        'change': change,
-                        'timestamp': int(time.time())
-                    })
-                except Exception as ex:
-                    print(f"{symbol} çekilemedi:", ex, flush=True)
-
-            print("Firebase'e veriler yazılıyor...", flush=True)
-            ref = db.reference('signals')
-            ref.set({sig['symbol']: sig for sig in signals})
-            print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri basariyla guncellendi!", flush=True)
-            
+            if raw_data:
+                signals = {}
+                for item in raw_data:
+                    symbol = item.get('symbol', '')
+                    if symbol in TARGET_SYMBOLS:
+                        formatted_key = symbol.replace('TRY', '_TRY')
+                        signals[formatted_key] = {
+                            'symbol': symbol,
+                            'price': float(item.get('lastPrice', 0)),
+                            'change': float(item.get('priceChangePercent', 0)),
+                            'timestamp': int(time.time())
+                        }
+                
+                # Firebase'e Dosyasız/Anahtarsız REST API ile Veri Yazma
+                print("Firebase'e veriler yazılıyor...", flush=True)
+                fb_res = requests.put(FIREBASE_URL, json=signals, timeout=10)
+                
+                if fb_res.status_code == 200:
+                    print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri basariyla guncellendi!", flush=True)
+                else:
+                    print(f"Firebase hatası ({fb_res.status_code}):", fb_res.text, flush=True)
+            else:
+                print("Binance'den veri alınamadı!", flush=True)
+                
         except Exception as e:
             print("Genel hata oluştu:", e, flush=True)
             
