@@ -1,1 +1,6 @@
+ccxt
+pandas
 requests
+flask
+firebase-admin
+gunicorn
