@@ -2,7 +2,6 @@ import os
 import time
 import threading
 import ccxt
-import pandas as pd
 from flask import Flask
 import firebase_admin
 from firebase_admin import db
@@ -29,26 +28,34 @@ if not firebase_admin._apps:
 # --- BINANCE BOT ARAMA DÖNGÜSÜ ---
 exchange = ccxt.binance()
 
+# Popüler TRY pariteleri (Hızlı ve takılmasız tarama için)
+TRY_PAIRS = [
+    'BTC/TRY', 'ETH/TRY', 'USDT/TRY', 'SOL/TRY', 'AVAX/TRY', 
+    'XRP/TRY', 'DOGE/TRY', 'PEPE/TRY', 'SHIB/TRY', 'ADA/TRY',
+    'NEAR/TRY', 'MATIC/TRY', 'AR/TRY', 'FLOKI/TRY', 'SUI/TRY'
+]
+
 def analyze_market():
     print("Binance piyasa taramasi baslatildi...")
     while True:
         try:
             print("Piyasa verileri çekiliyor...")
-            markets = exchange.load_markets()
-            try_pairs = [symbol for symbol in markets if symbol.endswith('/TRY')]
-            
             signals = []
-            for symbol in try_pairs[:15]:  # İlk 15 çifti tara
-                ticker = exchange.fetch_ticker(symbol)
-                price = ticker['last']
-                change = ticker['percentage']
-                
-                signals.append({
-                    'symbol': symbol.replace('/', '_'),
-                    'price': price,
-                    'change': change,
-                    'timestamp': int(time.time())
-                })
+            
+            for symbol in TRY_PAIRS:
+                try:
+                    ticker = exchange.fetch_ticker(symbol)
+                    price = ticker['last']
+                    change = ticker['percentage']
+                    
+                    signals.append({
+                        'symbol': symbol.replace('/', '_'),
+                        'price': price,
+                        'change': change,
+                        'timestamp': int(time.time())
+                    })
+                except Exception as ex:
+                    print(f"{symbol} çekilemedi:", ex)
 
             # Firebase Realtime Database'e gönder
             print("Firebase'e veriler yazılıyor...")
@@ -57,15 +64,12 @@ def analyze_market():
             print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri basariyla guncellendi!")
             
         except Exception as e:
-            print("Hata oluştu:", e)
+            print("Genel hata oluştu:", e)
             
         time.sleep(60)
 
 # --- UYGULAMA BAŞLANGICI ---
 if __name__ == "__main__":
-    # Binance analiz döngüsünü ayrı bir arka plan iş parçacığında (thread) başlat
     bot_thread = threading.Thread(target=analyze_market, daemon=True)
     bot_thread.start()
-    
-    # Flask sunucusunu çalıştır
     run_flask()
