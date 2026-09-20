@@ -33,6 +33,7 @@ def analyze_market():
     print("Binance piyasa taramasi baslatildi...")
     while True:
         try:
+            print("Piyasa verileri çekiliyor...")
             markets = exchange.load_markets()
             try_pairs = [symbol for symbol in markets if symbol.endswith('/TRY')]
             
@@ -50,9 +51,10 @@ def analyze_market():
                 })
 
             # Firebase Realtime Database'e gönder
+            print("Firebase'e veriler yazılıyor...")
             ref = db.reference('signals')
             ref.set({sig['symbol']: sig for sig in signals})
-            print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri guncellendi.")
+            print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri basariyla guncellendi!")
             
         except Exception as e:
             print("Hata oluştu:", e)
