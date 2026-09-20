@@ -28,7 +28,6 @@ if not firebase_admin._apps:
 # --- BINANCE BOT ARAMA DÖNGÜSÜ ---
 exchange = ccxt.binance()
 
-# Popüler TRY pariteleri (Hızlı ve takılmasız tarama için)
 TRY_PAIRS = [
     'BTC/TRY', 'ETH/TRY', 'USDT/TRY', 'SOL/TRY', 'AVAX/TRY', 
     'XRP/TRY', 'DOGE/TRY', 'PEPE/TRY', 'SHIB/TRY', 'ADA/TRY',
@@ -36,10 +35,10 @@ TRY_PAIRS = [
 ]
 
 def analyze_market():
-    print("Binance piyasa taramasi baslatildi...")
+    print("Binance piyasa taramasi baslatildi...", flush=True)
     while True:
         try:
-            print("Piyasa verileri çekiliyor...")
+            print("Piyasa verileri çekiliyor...", flush=True)
             signals = []
             
             for symbol in TRY_PAIRS:
@@ -55,16 +54,15 @@ def analyze_market():
                         'timestamp': int(time.time())
                     })
                 except Exception as ex:
-                    print(f"{symbol} çekilemedi:", ex)
+                    print(f"{symbol} çekilemedi:", ex, flush=True)
 
-            # Firebase Realtime Database'e gönder
-            print("Firebase'e veriler yazılıyor...")
+            print("Firebase'e veriler yazılıyor...", flush=True)
             ref = db.reference('signals')
             ref.set({sig['symbol']: sig for sig in signals})
-            print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri basariyla guncellendi!")
+            print(f"[{time.strftime('%H:%M:%S')}] Firebase sinyalleri basariyla guncellendi!", flush=True)
             
         except Exception as e:
-            print("Genel hata oluştu:", e)
+            print("Genel hata oluştu:", e, flush=True)
             
         time.sleep(60)
 
